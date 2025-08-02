@@ -25,6 +25,7 @@ export async function GET(request: NextRequest) {
       },
     })
   } catch (error: any) {
-    return NextResponse.json({ error: error.message || "Authentication failed" }, { status: 500 })
+    console.error("Auth check error:", error)
+    return NextResponse.json({ error: "Authentication failed" }, { status: 500 })
   }
 }

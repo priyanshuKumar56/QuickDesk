@@ -10,20 +10,17 @@ const options = {}
 let client: MongoClient
 let clientPromise: Promise<MongoClient>
 
-if (process.env.NODE_ENV === "development") {
-  // In development mode, use a global variable so that the value
-  // is preserved across module reloads caused by HMR (Hot Module Replacement).
-  const globalWithMongo = global as typeof globalThis & {
-    _mongoClientPromise?: Promise<MongoClient>
-  }
+declare global {
+  var _mongoClientPromise: Promise<MongoClient> | undefined
+}
 
-  if (!globalWithMongo._mongoClientPromise) {
+if (process.env.NODE_ENV === "development") {
+  if (!global._mongoClientPromise) {
     client = new MongoClient(uri, options)
-    globalWithMongo._mongoClientPromise = client.connect()
+    global._mongoClientPromise = client.connect()
   }
-  clientPromise = globalWithMongo._mongoClientPromise
+  clientPromise = global._mongoClientPromise
 } else {
-  // In production mode, it's best to not use a global variable.
   client = new MongoClient(uri, options)
   clientPromise = client.connect()
 }
@@ -31,6 +28,11 @@ if (process.env.NODE_ENV === "development") {
 export default clientPromise
 
 export async function getDatabase(): Promise<Db> {
-  const client = await clientPromise
-  return client.db("quickdesk")
+  try {
+    const client = await clientPromise
+    return client.db("quickdesk")
+  } catch (error) {
+    console.error("Failed to connect to MongoDB:", error)
+    throw new Error("Database connection failed")
+  }
 }

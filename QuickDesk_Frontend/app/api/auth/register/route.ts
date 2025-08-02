@@ -6,8 +6,20 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { email, password, name, role } = body
 
+    // Validate required fields
     if (!email || !password || !name) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(email)) {
+      return NextResponse.json({ error: "Invalid email format" }, { status: 400 })
+    }
+
+    // Validate password length
+    if (password.length < 6) {
+      return NextResponse.json({ error: "Password must be at least 6 characters" }, { status: 400 })
     }
 
     const user = await createUser({ email, password, name, role })
@@ -30,10 +42,15 @@ export async function POST(request: NextRequest) {
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
       maxAge: 7 * 24 * 60 * 60, // 7 days
+      path: "/",
     })
 
     return response
   } catch (error: any) {
-    return NextResponse.json({ error: error.message || "Registration failed" }, { status: 400 })
+    console.error("Registration error:", error)
+    return NextResponse.json(
+      { error: error.message || "Registration failed" },
+      { status: error.message?.includes("already exists") ? 409 : 500 },
+    )
   }
 }

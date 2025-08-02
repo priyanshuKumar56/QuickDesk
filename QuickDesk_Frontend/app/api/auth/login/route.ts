@@ -35,10 +35,12 @@ export async function POST(request: NextRequest) {
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
       maxAge: 7 * 24 * 60 * 60, // 7 days
+      path: "/",
     })
 
     return response
   } catch (error: any) {
+    console.error("Login error:", error)
     return NextResponse.json({ error: error.message || "Login failed" }, { status: 500 })
   }
 }

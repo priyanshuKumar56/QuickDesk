@@ -1,5 +1,5 @@
 {
-  "name": "quickdeskapp",
+  "name": "Quickdesk",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -48,7 +48,7 @@
     "date-fns": "4.1.0",
     "embla-carousel-react": "8.5.1",
     "gcp-metadata": "latest",
-    "geist": "^1.3.1",
+    "geist": "latest",
     "input-otp": "1.4.1",
     "jsonwebtoken": "latest",
     "kerberos": "latest",

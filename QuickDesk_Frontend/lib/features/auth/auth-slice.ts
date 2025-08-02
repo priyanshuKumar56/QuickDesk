@@ -22,94 +22,118 @@ interface AuthState {
   isAuthenticated: boolean
   loading: boolean
   error: string | null
+  initialized: boolean
 }
 
 const initialState: AuthState = {
   user: null,
   isAuthenticated: false,
-  loading: false,
+  loading: true,
   error: null,
+  initialized: false,
 }
 
 // API calls
 export const loginUser = createAsyncThunk(
   "auth/login",
-  async ({ email, password }: { email: string; password: string }) => {
-    const response = await fetch("/api/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
-    })
+  async ({ email, password }: { email: string; password: string }, { rejectWithValue }) => {
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      })
 
-    const data = await response.json()
+      const data = await response.json()
 
-    if (!response.ok) {
-      throw new Error(data.error || "Login failed")
+      if (!response.ok) {
+        return rejectWithValue(data.error || "Login failed")
+      }
+
+      return data.user
+    } catch (error) {
+      return rejectWithValue("Network error occurred")
     }
-
-    return data.user
   },
 )
 
 export const registerUser = createAsyncThunk(
   "auth/register",
-  async ({
-    email,
-    password,
-    name,
-    role,
-  }: {
-    email: string
-    password: string
-    name: string
-    role: "end_user" | "support_agent"
-  }) => {
-    const response = await fetch("/api/auth/register", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password, name, role }),
-    })
+  async (
+    {
+      email,
+      password,
+      name,
+      role,
+    }: {
+      email: string
+      password: string
+      name: string
+      role: "end_user" | "support_agent"
+    },
+    { rejectWithValue },
+  ) => {
+    try {
+      const response = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password, name, role }),
+      })
 
-    const data = await response.json()
+      const data = await response.json()
 
-    if (!response.ok) {
-      throw new Error(data.error || "Registration failed")
+      if (!response.ok) {
+        return rejectWithValue(data.error || "Registration failed")
+      }
+
+      return data.user
+    } catch (error) {
+      return rejectWithValue("Network error occurred")
     }
-
-    return data.user
   },
 )
 
-export const checkAuth = createAsyncThunk("auth/checkAuth", async () => {
-  const response = await fetch("/api/auth/me")
+export const checkAuth = createAsyncThunk("auth/checkAuth", async (_, { rejectWithValue }) => {
+  try {
+    const response = await fetch("/api/auth/me")
 
-  if (!response.ok) {
-    throw new Error("Not authenticated")
+    if (!response.ok) {
+      return rejectWithValue("Not authenticated")
+    }
+
+    const data = await response.json()
+    return data.user
+  } catch (error) {
+    return rejectWithValue("Network error occurred")
   }
-
-  const data = await response.json()
-  return data.user
 })
 
 export const logoutUser = createAsyncThunk("auth/logout", async () => {
   await fetch("/api/auth/logout", { method: "POST" })
 })
 
-export const requestUpgrade = createAsyncThunk("auth/requestUpgrade", async ({ reason }: { reason?: string }) => {
-  const response = await fetch("/api/users/upgrade-request", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ reason }),
-  })
+export const requestUpgrade = createAsyncThunk(
+  "auth/requestUpgrade",
+  async ({ reason }: { reason?: string }, { rejectWithValue }) => {
+    try {
+      const response = await fetch("/api/users/upgrade-request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason }),
+      })
 
-  const data = await response.json()
+      const data = await response.json()
 
-  if (!response.ok) {
-    throw new Error(data.error || "Failed to submit upgrade request")
-  }
+      if (!response.ok) {
+        return rejectWithValue(data.error || "Failed to submit upgrade request")
+      }
 
-  return data
-})
+      return data
+    } catch (error) {
+      return rejectWithValue("Network error occurred")
+    }
+  },
+)
 
 const authSlice = createSlice({
   name: "auth",
@@ -117,6 +141,10 @@ const authSlice = createSlice({
   reducers: {
     clearError: (state) => {
       state.error = null
+    },
+    setInitialized: (state) => {
+      state.initialized = true
+      state.loading = false
     },
   },
   extraReducers: (builder) => {
@@ -129,10 +157,12 @@ const authSlice = createSlice({
         state.loading = false
         state.user = action.payload
         state.isAuthenticated = true
+        state.initialized = true
       })
       .addCase(loginUser.rejected, (state, action) => {
         state.loading = false
-        state.error = action.error.message || "Login failed"
+        state.error = action.payload as string
+        state.initialized = true
       })
       .addCase(registerUser.pending, (state) => {
         state.loading = true
@@ -142,25 +172,35 @@ const authSlice = createSlice({
         state.loading = false
         state.user = action.payload
         state.isAuthenticated = true
+        state.initialized = true
       })
       .addCase(registerUser.rejected, (state, action) => {
         state.loading = false
-        state.error = action.error.message || "Registration failed"
+        state.error = action.payload as string
+        state.initialized = true
+      })
+      .addCase(checkAuth.pending, (state) => {
+        if (!state.initialized) {
+          state.loading = true
+        }
       })
       .addCase(checkAuth.fulfilled, (state, action) => {
         state.user = action.payload
         state.isAuthenticated = true
         state.loading = false
+        state.initialized = true
       })
       .addCase(checkAuth.rejected, (state) => {
         state.user = null
         state.isAuthenticated = false
         state.loading = false
+        state.initialized = true
       })
       .addCase(logoutUser.fulfilled, (state) => {
         state.user = null
         state.isAuthenticated = false
         state.error = null
+        state.initialized = true
       })
       .addCase(requestUpgrade.fulfilled, (state) => {
         if (state.user) {
@@ -172,8 +212,11 @@ const authSlice = createSlice({
           }
         }
       })
+      .addCase(requestUpgrade.rejected, (state, action) => {
+        state.error = action.payload as string
+      })
   },
 })
 
-export const { clearError } = authSlice.actions
+export const { clearError, setInitialized } = authSlice.actions
 export default authSlice.reducer

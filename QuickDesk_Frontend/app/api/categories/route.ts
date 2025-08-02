@@ -4,13 +4,60 @@ import { getDatabase } from "@/lib/mongodb"
 import type { Category } from "@/lib/models/Category"
 import { ObjectId } from "mongodb"
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     const db = await getDatabase()
+
+    // Create default categories if none exist
+    const count = await db.collection<Category>("categories").countDocuments()
+    if (count === 0) {
+      const defaultCategories = [
+        {
+          name: "Technical",
+          description: "Technical issues and bugs",
+          color: "#ef4444",
+          isActive: true,
+          createdBy: new ObjectId(),
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        {
+          name: "Feature Request",
+          description: "New feature requests",
+          color: "#3b82f6",
+          isActive: true,
+          createdBy: new ObjectId(),
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        {
+          name: "Account",
+          description: "Account related issues",
+          color: "#10b981",
+          isActive: true,
+          createdBy: new ObjectId(),
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        {
+          name: "Billing",
+          description: "Billing and payment issues",
+          color: "#f59e0b",
+          isActive: true,
+          createdBy: new ObjectId(),
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ]
+
+      await db.collection<Category>("categories").insertMany(defaultCategories)
+    }
+
     const categories = await db.collection<Category>("categories").find({ isActive: true }).toArray()
 
     return NextResponse.json({ categories })
   } catch (error: any) {
+    console.error("Fetch categories error:", error)
     return NextResponse.json({ error: error.message || "Failed to fetch categories" }, { status: 500 })
   }
 }
@@ -57,6 +104,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ category })
   } catch (error: any) {
+    console.error("Create category error:", error)
     return NextResponse.json({ error: error.message || "Failed to create category" }, { status: 500 })
   }
 }
