@@ -1,4 +1,4 @@
-import { useState } from 'react'
+
 
 
 function App() {
@@ -6,9 +6,9 @@ function App() {
 
   return (
     <>
-     <h1>welcome to app</h1>
+      <h1>welcome to app</h1>
     </>
-   
+
   )
 }
 
