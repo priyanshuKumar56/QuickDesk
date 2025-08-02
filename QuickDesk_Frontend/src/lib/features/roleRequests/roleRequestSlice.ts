@@ -29,24 +29,31 @@ const initialState: RoleRequestState = {
   error: null,
 }
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api"
+// FIXED: Consistent API URL
+const API_BASE_URL = (typeof window !== 'undefined' && import.meta?.env?.VITE_API_URL) 
+  ? import.meta.env.VITE_API_URL 
+  : "http://localhost:5000/api"
 
 const getAuthHeaders = (token: string) => ({
   "Content-Type": "application/json",
   Authorization: `Bearer ${token}`,
 })
 
+// Helper function to validate token and auth state
+const validateAuth = (state: any) => {
+  const authState = state.auth
+  if (!authState?.token || !authState?.isAuthenticated || !authState?.user) {
+    throw new Error("No valid authentication token")
+  }
+  return authState.token
+}
+
 // Async thunks
 export const fetchRoleRequests = createAsyncThunk(
   "roleRequests/fetchRoleRequests",
   async (_, { rejectWithValue, getState }) => {
     try {
-      const state = getState() as { auth: { token: string } }
-      const token = state.auth.token
-
-      if (!token) {
-        return rejectWithValue("No authentication token")
-      }
+      const token = validateAuth(getState())
 
       const response = await fetch(`${API_BASE_URL}/role-requests`, {
         headers: {
@@ -57,11 +64,18 @@ export const fetchRoleRequests = createAsyncThunk(
       const data = await response.json()
 
       if (!response.ok) {
+        // Handle 401 specifically
+        if (response.status === 401) {
+          return rejectWithValue("Authentication expired")
+        }
         return rejectWithValue(data.message || "Failed to fetch role requests")
       }
 
-      return data.requests
+      return data.requests || []
     } catch (error: any) {
+      if (error.message === "No valid authentication token") {
+        return rejectWithValue(error.message)
+      }
       return rejectWithValue(error.message || "Network error")
     }
   },
@@ -74,12 +88,7 @@ export const createRoleRequest = createAsyncThunk(
     { rejectWithValue, getState },
   ) => {
     try {
-      const state = getState() as { auth: { token: string } }
-      const token = state.auth.token
-
-      if (!token) {
-        return rejectWithValue("No authentication token")
-      }
+      const token = validateAuth(getState())
 
       const response = await fetch(`${API_BASE_URL}/role-requests`, {
         method: "POST",
@@ -90,11 +99,17 @@ export const createRoleRequest = createAsyncThunk(
       const data = await response.json()
 
       if (!response.ok) {
+        if (response.status === 401) {
+          return rejectWithValue("Authentication expired")
+        }
         return rejectWithValue(data.message || "Failed to create role request")
       }
 
       return data.request
     } catch (error: any) {
+      if (error.message === "No valid authentication token") {
+        return rejectWithValue(error.message)
+      }
       return rejectWithValue(error.message || "Network error")
     }
   },
@@ -107,12 +122,7 @@ export const reviewRoleRequest = createAsyncThunk(
     { rejectWithValue, getState },
   ) => {
     try {
-      const state = getState() as { auth: { token: string } }
-      const token = state.auth.token
-
-      if (!token) {
-        return rejectWithValue("No authentication token")
-      }
+      const token = validateAuth(getState())
 
       const response = await fetch(`${API_BASE_URL}/role-requests/${requestId}/review`, {
         method: "PUT",
@@ -123,11 +133,17 @@ export const reviewRoleRequest = createAsyncThunk(
       const data = await response.json()
 
       if (!response.ok) {
+        if (response.status === 401) {
+          return rejectWithValue("Authentication expired")
+        }
         return rejectWithValue(data.message || "Failed to review role request")
       }
 
       return data.request
     } catch (error: any) {
+      if (error.message === "No valid authentication token") {
+        return rejectWithValue(error.message)
+      }
       return rejectWithValue(error.message || "Network error")
     }
   },
@@ -137,12 +153,7 @@ export const fetchUserRoleRequest = createAsyncThunk(
   "roleRequests/fetchUserRoleRequest",
   async (_, { rejectWithValue, getState }) => {
     try {
-      const state = getState() as { auth: { token: string } }
-      const token = state.auth.token
-
-      if (!token) {
-        return rejectWithValue("No authentication token")
-      }
+      const token = validateAuth(getState())
 
       const response = await fetch(`${API_BASE_URL}/role-requests/my-request`, {
         headers: {
@@ -150,17 +161,24 @@ export const fetchUserRoleRequest = createAsyncThunk(
         },
       })
 
+      if (response.status === 404) {
+        return null // No request found - this is normal
+      }
+
       const data = await response.json()
 
       if (!response.ok) {
-        if (response.status === 404) {
-          return null // No request found
+        if (response.status === 401) {
+          return rejectWithValue("Authentication expired")
         }
         return rejectWithValue(data.message || "Failed to fetch user role request")
       }
 
       return data.request
     } catch (error: any) {
+      if (error.message === "No valid authentication token") {
+        return rejectWithValue(error.message)
+      }
       return rejectWithValue(error.message || "Network error")
     }
   },
@@ -173,36 +191,13 @@ const roleRequestSlice = createSlice({
     clearError: (state) => {
       state.error = null
     },
-    // Keep legacy actions for backward compatibility
-    setLoading: (state, action: PayloadAction<boolean>) => {
-      state.loading = action.payload
-    },
-    setRequests: (state, action: PayloadAction<RoleRequest[]>) => {
-      state.requests = action.payload
+    // FIXED: Remove legacy actions that could cause state inconsistencies
+    resetState: (state) => {
+      state.requests = []
+      state.userRequest = null
       state.loading = false
-    },
-    addRequest: (state, action: PayloadAction<RoleRequest>) => {
-      state.requests.unshift(action.payload)
-      if (action.payload.userId === state.userRequest?.userId) {
-        state.userRequest = action.payload
-      }
-    },
-    updateRequest: (state, action: PayloadAction<RoleRequest>) => {
-      const index = state.requests.findIndex((r) => r.id === action.payload.id)
-      if (index !== -1) {
-        state.requests[index] = action.payload
-      }
-      if (state.userRequest?.id === action.payload.id) {
-        state.userRequest = action.payload
-      }
-    },
-    setUserRequest: (state, action: PayloadAction<RoleRequest | null>) => {
-      state.userRequest = action.payload
-    },
-    setError: (state, action: PayloadAction<string | null>) => {
-      state.error = action.payload
-      state.loading = false
-    },
+      state.error = null
+    }
   },
   extraReducers: (builder) => {
     // Fetch role requests
@@ -214,10 +209,15 @@ const roleRequestSlice = createSlice({
       .addCase(fetchRoleRequests.fulfilled, (state, action) => {
         state.loading = false
         state.requests = action.payload
+        state.error = null
       })
       .addCase(fetchRoleRequests.rejected, (state, action) => {
         state.loading = false
         state.error = action.payload as string
+        // Clear requests on auth error
+        if (action.payload === "Authentication expired" || action.payload === "No valid authentication token") {
+          state.requests = []
+        }
       })
 
     // Create role request
@@ -230,6 +230,7 @@ const roleRequestSlice = createSlice({
         state.loading = false
         state.requests.unshift(action.payload)
         state.userRequest = action.payload
+        state.error = null
       })
       .addCase(createRoleRequest.rejected, (state, action) => {
         state.loading = false
@@ -238,6 +239,9 @@ const roleRequestSlice = createSlice({
 
     // Review role request
     builder
+      .addCase(reviewRoleRequest.pending, (state) => {
+        state.error = null
+      })
       .addCase(reviewRoleRequest.fulfilled, (state, action) => {
         const index = state.requests.findIndex((r) => r.id === action.payload.id)
         if (index !== -1) {
@@ -246,19 +250,30 @@ const roleRequestSlice = createSlice({
         if (state.userRequest?.id === action.payload.id) {
           state.userRequest = action.payload
         }
+        state.error = null
       })
       .addCase(reviewRoleRequest.rejected, (state, action) => {
         state.error = action.payload as string
       })
 
     // Fetch user role request
-    builder.addCase(fetchUserRoleRequest.fulfilled, (state, action) => {
-      state.userRequest = action.payload
-    })
+    builder
+      .addCase(fetchUserRoleRequest.pending, (state) => {
+        state.error = null
+      })
+      .addCase(fetchUserRoleRequest.fulfilled, (state, action) => {
+        state.userRequest = action.payload
+        state.error = null
+      })
+      .addCase(fetchUserRoleRequest.rejected, (state, action) => {
+        state.error = action.payload as string
+        // Clear user request on auth error
+        if (action.payload === "Authentication expired" || action.payload === "No valid authentication token") {
+          state.userRequest = null
+        }
+      })
   },
 })
 
-export const { clearError, setLoading, setRequests, addRequest, updateRequest, setUserRequest, setError } =
-  roleRequestSlice.actions
-
+export const { clearError, resetState } = roleRequestSlice.actions
 export default roleRequestSlice.reducer

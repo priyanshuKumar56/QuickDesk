@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { UserPlus, Clock, CheckCircle, XCircle, AlertCircle } from "lucide-react"
 import { useAppSelector, useAppDispatch } from "@/lib/hooks"
-import { addRequest } from "@/lib/features/roleRequests/roleRequestSlice"
+// import { addRequest } from "@/lib/features/roleRequests/roleRequestSlice"
 // import { toast } from "@/hooks/use-toast"
 
 export function RoleRequestSection() {
@@ -42,7 +42,7 @@ export function RoleRequestSection() {
         createdAt: new Date().toISOString(),
       }
 
-      dispatch(addRequest(newRequest))
+      // dispatch(addRequest(newRequest))
       setIsSubmitting(false)
       setRequestData({ requestedRole: "agent", reason: "" })
 

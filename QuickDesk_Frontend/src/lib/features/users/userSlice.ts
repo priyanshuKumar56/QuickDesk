@@ -13,12 +13,24 @@ const initialState: UserState = {
   error: null,
 }
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api"
+// FIXED: Consistent API URL
+const API_BASE_URL = (typeof window !== 'undefined' && import.meta?.env?.VITE_API_URL) 
+  ? import.meta.env.VITE_API_URL 
+  : "http://localhost:5000/api"
 
 const getAuthHeaders = (token: string) => ({
   "Content-Type": "application/json",
   Authorization: `Bearer ${token}`,
 })
+
+// Helper function to validate token and auth state
+const validateAuth = (state: any) => {
+  const authState = state.auth
+  if (!authState?.token || !authState?.isAuthenticated || !authState?.user) {
+    throw new Error("No valid authentication token")
+  }
+  return authState.token
+}
 
 // Async thunks
 export const fetchUsers = createAsyncThunk(
@@ -28,12 +40,7 @@ export const fetchUsers = createAsyncThunk(
     { rejectWithValue, getState },
   ) => {
     try {
-      const state = getState() as { auth: { token: string } }
-      const token = state.auth.token
-
-      if (!token) {
-        return rejectWithValue("No authentication token")
-      }
+      const token = validateAuth(getState())
 
       const queryParams = new URLSearchParams()
       if (params.role) queryParams.append("role", params.role)
@@ -41,7 +48,9 @@ export const fetchUsers = createAsyncThunk(
       if (params.page) queryParams.append("page", params.page.toString())
       if (params.limit) queryParams.append("limit", params.limit.toString())
 
-      const response = await fetch(`${API_BASE_URL}/users?${queryParams}`, {
+      const url = `${API_BASE_URL}/users${queryParams.toString() ? `?${queryParams}` : ''}`
+      
+      const response = await fetch(url, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -50,26 +59,27 @@ export const fetchUsers = createAsyncThunk(
       const data = await response.json()
 
       if (!response.ok) {
+        if (response.status === 401) {
+          return rejectWithValue("Authentication expired")
+        }
         return rejectWithValue(data.message || "Failed to fetch users")
       }
 
-      return data.users
+      return data.users || []
     } catch (error: any) {
+      if (error.message === "No valid authentication token") {
+        return rejectWithValue(error.message)
+      }
       return rejectWithValue(error.message || "Network error")
     }
   },
 )
 
-export const updateUserAsync = createAsyncThunk(
+export const updateUser = createAsyncThunk(
   "users/updateUser",
   async ({ userId, updates }: { userId: string; updates: Partial<User> }, { rejectWithValue, getState }) => {
     try {
-      const state = getState() as { auth: { token: string } }
-      const token = state.auth.token
-
-      if (!token) {
-        return rejectWithValue("No authentication token")
-      }
+      const token = validateAuth(getState())
 
       const response = await fetch(`${API_BASE_URL}/users/${userId}`, {
         method: "PUT",
@@ -80,26 +90,27 @@ export const updateUserAsync = createAsyncThunk(
       const data = await response.json()
 
       if (!response.ok) {
+        if (response.status === 401) {
+          return rejectWithValue("Authentication expired")
+        }
         return rejectWithValue(data.message || "Failed to update user")
       }
 
       return data.user
     } catch (error: any) {
+      if (error.message === "No valid authentication token") {
+        return rejectWithValue(error.message)
+      }
       return rejectWithValue(error.message || "Network error")
     }
   },
 )
 
-export const deleteUserAsync = createAsyncThunk(
+export const deleteUser = createAsyncThunk(
   "users/deleteUser",
   async (userId: string, { rejectWithValue, getState }) => {
     try {
-      const state = getState() as { auth: { token: string } }
-      const token = state.auth.token
-
-      if (!token) {
-        return rejectWithValue("No authentication token")
-      }
+      const token = validateAuth(getState())
 
       const response = await fetch(`${API_BASE_URL}/users/${userId}`, {
         method: "DELETE",
@@ -110,11 +121,17 @@ export const deleteUserAsync = createAsyncThunk(
 
       if (!response.ok) {
         const data = await response.json()
+        if (response.status === 401) {
+          return rejectWithValue("Authentication expired")
+        }
         return rejectWithValue(data.message || "Failed to delete user")
       }
 
       return userId
     } catch (error: any) {
+      if (error.message === "No valid authentication token") {
+        return rejectWithValue(error.message)
+      }
       return rejectWithValue(error.message || "Network error")
     }
   },
@@ -127,30 +144,12 @@ const userSlice = createSlice({
     clearError: (state) => {
       state.error = null
     },
-    // Keep legacy actions for backward compatibility
-    setLoading: (state, action: PayloadAction<boolean>) => {
-      state.loading = action.payload
-    },
-    setUsers: (state, action: PayloadAction<User[]>) => {
-      state.users = action.payload
+    // FIXED: Remove legacy actions that could cause state inconsistencies
+    resetState: (state) => {
+      state.users = []
       state.loading = false
-    },
-    addUser: (state, action: PayloadAction<User>) => {
-      state.users.push(action.payload)
-    },
-    updateUser: (state, action: PayloadAction<User>) => {
-      const index = state.users.findIndex((u) => u.id === action.payload.id)
-      if (index !== -1) {
-        state.users[index] = action.payload
-      }
-    },
-    deleteUser: (state, action: PayloadAction<string>) => {
-      state.users = state.users.filter((u) => u.id !== action.payload)
-    },
-    setError: (state, action: PayloadAction<string | null>) => {
-      state.error = action.payload
-      state.loading = false
-    },
+      state.error = null
+    }
   },
   extraReducers: (builder) => {
     // Fetch users
@@ -162,35 +161,47 @@ const userSlice = createSlice({
       .addCase(fetchUsers.fulfilled, (state, action) => {
         state.loading = false
         state.users = action.payload
+        state.error = null
       })
       .addCase(fetchUsers.rejected, (state, action) => {
         state.loading = false
         state.error = action.payload as string
+        // Clear users on auth error
+        if (action.payload === "Authentication expired" || action.payload === "No valid authentication token") {
+          state.users = []
+        }
       })
 
     // Update user
     builder
-      .addCase(updateUserAsync.fulfilled, (state, action) => {
+      .addCase(updateUser.pending, (state) => {
+        state.error = null
+      })
+      .addCase(updateUser.fulfilled, (state, action) => {
         const index = state.users.findIndex((u) => u.id === action.payload.id)
         if (index !== -1) {
           state.users[index] = action.payload
         }
+        state.error = null
       })
-      .addCase(updateUserAsync.rejected, (state, action) => {
+      .addCase(updateUser.rejected, (state, action) => {
         state.error = action.payload as string
       })
 
     // Delete user
     builder
-      .addCase(deleteUserAsync.fulfilled, (state, action) => {
-        state.users = state.users.filter((u) => u.id !== action.payload)
+      .addCase(deleteUser.pending, (state) => {
+        state.error = null
       })
-      .addCase(deleteUserAsync.rejected, (state, action) => {
+      .addCase(deleteUser.fulfilled, (state, action) => {
+        state.users = state.users.filter((u) => u.id !== action.payload)
+        state.error = null
+      })
+      .addCase(deleteUser.rejected, (state, action) => {
         state.error = action.payload as string
       })
   },
 })
 
-export const { clearError, setLoading, setUsers, addUser, updateUser, deleteUser, setError } = userSlice.actions
-
+export const { clearError, resetState } = userSlice.actions
 export default userSlice.reducer
