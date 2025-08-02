@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Eye, EyeOff, Ticket, Mail, Lock } from 'lucide-react';
-import { useAuth } from '../../hooks/useAuth';
+import { useAuth } from '../../hooks/useauth';
 
 const Login: React.FC = () => {
     const [email, setEmail] = useState('');

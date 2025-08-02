@@ -14,9 +14,9 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
-import type { RootState } from '../../store';
+import type { RootState } from '../../Redux_mnagement/store/store';
 import { useTickets } from '../../hooks/useTickets';
-import { formatDate } from '../../lib/utils';
+// import { formatDate } from '../../lib/utils';
 
 const Dashboard: React.FC = () => {
     useTickets(); // Load mock data
@@ -152,7 +152,7 @@ const Dashboard: React.FC = () => {
                                             </div>
                                         </div>
                                         <div className="text-sm text-gray-500">
-                                            {formatDate(ticket.createdAt)}
+                                            {/* {formatDate(ticket.createdAt)} */}
                                         </div>
                                     </div>
                                 </Link>
