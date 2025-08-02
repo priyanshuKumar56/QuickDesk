@@ -1,7 +1,7 @@
 import { useDispatch, useSelector } from 'react-redux';
-import { RootState } from '../Redux_mnagement/store/store';
-import { loginStart, loginSuccess, loginFailure, logout } from '../Redux_mnagement/store/slices/authSlice';
-import type { User } from '../Redux_mnagement/store/slices/authSlice';
+import { RootState } from '../store';
+import { loginStart, loginSuccess, loginFailure, logout } from '../store/slices/authSlice';
+import type { User } from '../store/slices/authSlice';
 
 export const useAuth = () => {
   const dispatch = useDispatch();

@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useDispatch } from 'react-redux';
-import { setTickets } from '../Redux_mnagement/store/slices/ticketsSlice';
-import type { Ticket } from '../Redux_mnagement/store/slices/ticketsSlice';
+import { setTickets } from '../store/slices/ticketsSlice';
+import type { Ticket } from '../store/slices/ticketsSlice';
 
 // Mock data generator
 const generateMockTickets = (): Ticket[] => {

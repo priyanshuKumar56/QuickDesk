@@ -1,234 +1,243 @@
-"use client"
+import React from 'react';
+import { useSelector } from 'react-redux';
+import { Link } from 'react-router-dom';
+import { 
+  Plus, 
+  TrendingUp, 
+  Clock, 
+  CheckCircle, 
+  AlertTriangle,
+  Ticket,
+  Users,
+  BarChart3
+} from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
+import { Button } from '../ui/button';
+import { Badge } from '../ui/badge';
+import type { RootState } from '../../store';
+import { useTickets } from '../../hooks/useTickets';
+import { formatDate } from '../../lib/utils';
 
-import { useEffect, useState } from "react"
-import { useAppSelector, useAppDispatch } from "@/lib/hooks"
-import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
-import { fetchTickets } from "@/lib/features/tickets/ticketSlice"
-import { fetchUsers } from "@/lib/features/users/userSlice"
-import { fetchRoleRequests, fetchUserRoleRequest } from "@/lib/features/roleRequests/roleRequestSlice"
-import { getCurrentUser } from "@/lib/features/auth/authSlice"
-import { AppSidebar } from "@/components/layout/app-sidebar"
-import { DashboardHeader } from "@/components/layout/dashboard-header"
-import { TicketList } from "@/components/tickets/ticket-list"
-import { TicketDetail } from "@/components/tickets/ticket-detail"
-import { CreateTicket } from "@/components/tickets/create-ticket"
-import { UserManagement } from "@/components/admin/user-management"
-import { RoleRequestsManagement } from "@/components/admin/role-requests-management"
-import { ProfileSettings } from "@/components/profile/profile-settings"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { AlertCircle, Loader2 } from "lucide-react"
+const Dashboard: React.FC = () => {
+  useTickets(); // Load mock data
+  const { user } = useSelector((state: RootState) => state.auth);
+  const { tickets } = useSelector((state: RootState) => state.tickets);
 
-export default function Dashboard() {
-  const dispatch = useAppDispatch()
-  const { user, token, isAuthenticated, initialized } = useAppSelector((state) => state.auth)
-  const { currentTicket, loading: ticketsLoading, error: ticketsError } = useAppSelector((state) => state.tickets)
-  const { loading: usersLoading, error: usersError } = useAppSelector((state) => state.users)
-  const { loading: roleRequestsLoading, error: roleRequestsError } = useAppSelector((state) => state.roleRequests)
-  const [activeView, setActiveView] = useState("dashboard")
-  const [initialLoading, setInitialLoading] = useState(true)
-  const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [initializationError, setInitializationError] = useState<string | null>(null)
+  const stats = {
+    total: tickets.length,
+    open: tickets.filter(t => t.status === 'open').length,
+    inProgress: tickets.filter(t => t.status === 'in-progress').length,
+    resolved: tickets.filter(t => t.status === 'resolved').length,
+  };
 
-  useEffect(() => {
-    const initializeDashboard = async () => {
-      // Only initialize if authenticated and initialized, and not already loading
-      if (!isAuthenticated || !initialized || !token || !user || initialLoading === false) {
-        return
-      }
-
-      try {
-        setInitializationError(null)
-
-        // Always fetch user's tickets and their own role request
-        const basePromises = [
-          dispatch(fetchTickets({ queue: "my-tickets" })).unwrap(),
-          dispatch(fetchUserRoleRequest()).unwrap().catch((error) => {
-            // 404 is normal if user has no role request
-            if (!error.includes('404') && !error.includes('Not Found')) {
-              throw error
-            }
-            return null
-          })
-        ]
-
-        // Role-based data fetching
-        const roleBasedPromises = []
-
-        if (user.role === "admin") {
-          // Admins can fetch all users and role requests
-          roleBasedPromises.push(
-            dispatch(fetchUsers()).unwrap(),
-            dispatch(fetchRoleRequests()).unwrap()
-          )
-        } else if (user.role === "agent") {
-          // Agents might be able to fetch users (depends on your backend)
-          // Try to fetch users, but don't fail if forbidden
-          roleBasedPromises.push(
-            dispatch(fetchUsers()).unwrap().catch((error) => {
-              if (error.includes('403') || error.includes('Access denied')) {
-                console.log('Agent cannot access users - this is normal')
-                return null
-              }
-              throw error
-            })
-          )
-        }
-        // Regular users don't need additional data beyond their tickets and role request
-
-        // Execute all promises
-        await Promise.all([...basePromises, ...roleBasedPromises])
-
-      } catch (error: any) {
-        console.error("Failed to initialize dashboard:", error)
-        setInitializationError(error.message || 'Failed to load dashboard data')
-      } finally {
-        setInitialLoading(false)
-      }
-    }
-
-    initializeDashboard()
-  }, [dispatch, isAuthenticated, initialized, token, user, initialLoading])
-
-  // Show loading spinner during initial load or auth initialization
-  if (!initialized || initialLoading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-4" />
-          <p className="text-gray-600">Loading dashboard...</p>
-        </div>
-      </div>
-    )
-  }
-
-  // Show error if user is not authenticated
-  if (!isAuthenticated || !user) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <Alert className="max-w-md border-red-200 bg-red-50">
-          <AlertCircle className="h-4 w-4 text-red-600" />
-          <AlertDescription className="text-red-800">
-            Authentication required. Please log in to access the dashboard.
-          </AlertDescription>
-        </Alert>
-      </div>
-    )
-  }
-
-  const renderContent = () => {
-    // Show initialization error with retry option
-    if (initializationError) {
-      return (
-        <Alert className="border-red-200 bg-red-50">
-          <AlertCircle className="h-4 w-4 text-red-600" />
-          <AlertDescription className="text-red-800">
-            {initializationError}
-            <button
-              onClick={() => {
-                setInitializationError(null)
-                setInitialLoading(true)
-              }}
-              className="ml-2 px-3 py-1 bg-red-600 text-white rounded text-sm hover:bg-red-700"
-            >
-              Retry
-            </button>
-          </AlertDescription>
-        </Alert>
-      )
-    }
-
-    // Filter errors based on user role - don't show 403 errors for features user can't access
-    const relevantErrors = []
-
-    // Always show ticket errors
-    if (ticketsError && !ticketsError.includes('403')) {
-      relevantErrors.push(ticketsError)
-    }
-
-    // Only show user/role request errors for admins
-    if (user.role === 'admin') {
-      if (usersError && !usersError.includes('403')) {
-        relevantErrors.push(usersError)
-      }
-      if (roleRequestsError && !roleRequestsError.includes('403')) {
-        relevantErrors.push(roleRequestsError)
-      }
-    }
-
-    // Show relevant errors
-    if (relevantErrors.length > 0) {
-      return (
-        <Alert className="border-red-200 bg-red-50">
-          <AlertCircle className="h-4 w-4 text-red-600" />
-          <AlertDescription className="text-red-800">
-            {relevantErrors.join(', ')}
-          </AlertDescription>
-        </Alert>
-      )
-    }
-
-    switch (activeView) {
-      case "dashboard":
-        return currentTicket ? <TicketDetail /> : <TicketList />
-      case "create-ticket":
-        return <CreateTicket onClose={() => setActiveView("dashboard")} />
-      case "users":
-        if (user?.role !== "admin") {
-          return (
-            <Alert className="border-yellow-200 bg-yellow-50">
-              <AlertCircle className="h-4 w-4 text-yellow-600" />
-              <AlertDescription className="text-yellow-800">
-                You don't have permission to access user management. Admin privileges required.
-              </AlertDescription>
-            </Alert>
-          )
-        }
-        return <UserManagement />
-      case "role-requests":
-        if (user?.role !== "admin") {
-          return (
-            <Alert className="border-yellow-200 bg-yellow-50">
-              <AlertCircle className="h-4 w-4 text-yellow-600" />
-              <AlertDescription className="text-yellow-800">
-                You don't have permission to access role requests. Admin privileges required.
-              </AlertDescription>
-            </Alert>
-          )
-        }
-        return <RoleRequestsManagement />
-      case "profile":
-        return <ProfileSettings />
-      default:
-        return <TicketList />
-    }
-  }
+  const recentTickets = tickets.slice(0, 5);
 
   return (
-    <SidebarProvider>
-      <div className="min-h-screen bg-gray-50 flex">
-        {/* Sidebar */}
-        <AppSidebar
-          activeView={activeView}
-          onViewChange={setActiveView}
-          onClose={() => setSidebarOpen(false)}
-          userRole={user?.role} // Pass user role to sidebar to conditionally show admin options
-        />
+    <div className="space-y-6">
+      {/* Welcome Section */}
+      <Card>
+        <CardContent className="pt-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-800 mb-2">
+              Welcome back, {user?.name}!
+            </h1>
+            <p className="text-gray-600">
+              {user?.role === 'admin' ? 'Manage your help desk system' : 
+               user?.role === 'agent' ? 'Handle and resolve customer tickets' : 
+               'Track your support tickets and get help'}
+            </p>
+          </div>
+          <Button asChild>
+            <Link to="/tickets/new" className="flex items-center space-x-2">
+            <Plus className="w-4 h-4" />
+            <span>New Ticket</span>
+            </Link>
+          </Button>
+        </div>
+        </CardContent>
+      </Card>
 
-        {/* Main content */}
-        <SidebarInset className="flex-1">
-          <DashboardHeader
-            activeView={activeView}
-            onViewChange={setActiveView}
-            onMenuClick={() => setSidebarOpen(true)}
-            userRole={user?.role} // Pass user role to header
-          />
-          <main className="flex-1 p-6">
-            <div className="bg-white rounded-lg shadow-professional border border-gray-200 p-6 min-h-[calc(100vh-200px)]">
-              {renderContent()}
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <Card>
+          <CardContent className="pt-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Total Tickets</p>
+              <p className="text-3xl font-bold text-gray-800">{stats.total}</p>
             </div>
-          </main>
-        </SidebarInset>
+            <div className="p-3 bg-blue-100 rounded-lg">
+              <Ticket className="w-6 h-6 text-blue-600" />
+            </div>
+          </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Open</p>
+              <p className="text-3xl font-bold text-blue-600">{stats.open}</p>
+            </div>
+            <div className="p-3 bg-blue-100 rounded-lg">
+              <Clock className="w-6 h-6 text-blue-600" />
+            </div>
+          </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">In Progress</p>
+              <p className="text-3xl font-bold text-yellow-600">{stats.inProgress}</p>
+            </div>
+            <div className="p-3 bg-yellow-100 rounded-lg">
+              <TrendingUp className="w-6 h-6 text-yellow-600" />
+            </div>
+          </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Resolved</p>
+              <p className="text-3xl font-bold text-green-600">{stats.resolved}</p>
+            </div>
+            <div className="p-3 bg-green-100 rounded-lg">
+              <CheckCircle className="w-6 h-6 text-green-600" />
+            </div>
+          </div>
+          </CardContent>
+        </Card>
       </div>
-    </SidebarProvider>
-  )
-}
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Recent Tickets */}
+        <Card className="lg:col-span-2">
+          <CardHeader>
+          <div className="flex items-center justify-between mb-6">
+            <CardTitle>Recent Tickets</CardTitle>
+            <Link to="/tickets" className="text-primary-600 hover:text-primary-700 font-medium text-sm">
+              View all →
+            </Link>
+          </div>
+          </CardHeader>
+          <CardContent>
+
+          <div className="space-y-4">
+            {recentTickets.length > 0 ? recentTickets.map((ticket) => (
+              <Link
+                key={ticket.id}
+                to={`/tickets/${ticket.id}`}
+                className="block p-4 rounded-xl border border-gray-200/50 hover:bg-white/50 transition-all duration-200 hover:shadow-md"
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <h3 className="font-medium text-gray-800 mb-1">{ticket.title}</h3>
+                    <p className="text-sm text-gray-600 mb-2 line-clamp-2">{ticket.description}</p>
+                    <div className="flex items-center space-x-3">
+                      <Badge variant={ticket.status as any} className="text-xs">
+                        {ticket.status.replace('-', ' ')}
+                      </Badge>
+                      <Badge variant={ticket.priority as any} className="text-xs">
+                        {ticket.priority}
+                      </Badge>
+                      <span className="text-xs text-gray-500">#{ticket.id}</span>
+                    </div>
+                  </div>
+                  <div className="text-sm text-gray-500">
+                    {formatDate(ticket.createdAt)}
+                  </div>
+                </div>
+              </Link>
+            )) : (
+              <div className="text-center py-8">
+                <Ticket className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                <p className="text-gray-500">No tickets yet</p>
+                <Link to="/tickets/new" className="text-primary-600 hover:text-primary-700 font-medium text-sm">
+                  Create your first ticket →
+                </Link>
+              </div>
+            )}
+          </div>
+          </CardContent>
+        </Card>
+
+        {/* Quick Actions */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Quick Actions</CardTitle>
+          </CardHeader>
+          <CardContent>
+          
+          <div className="space-y-3">
+            <Link to="/tickets/new" className="flex items-center space-x-3 p-4 rounded-xl hover:bg-white/50 transition-colors group">
+              <div className="p-2 bg-primary-100 rounded-lg group-hover:bg-primary-200 transition-colors">
+                <Plus className="w-5 h-5 text-primary-600" />
+              </div>
+              <div>
+                <p className="font-medium text-gray-800">Create Ticket</p>
+                <p className="text-sm text-gray-600">Submit a new support request</p>
+              </div>
+            </Link>
+
+            <Link to="/tickets" className="flex items-center space-x-3 p-4 rounded-xl hover:bg-white/50 transition-colors group">
+              <div className="p-2 bg-blue-100 rounded-lg group-hover:bg-blue-200 transition-colors">
+                <Ticket className="w-5 h-5 text-blue-600" />
+              </div>
+              <div>
+                <p className="font-medium text-gray-800">View Tickets</p>
+                <p className="text-sm text-gray-600">Check your ticket status</p>
+              </div>
+            </Link>
+
+            {(user?.role === 'agent' || user?.role === 'admin') && (
+              <>
+                <Link to="/tickets/all" className="flex items-center space-x-3 p-4 rounded-xl hover:bg-white/50 transition-colors group">
+                  <div className="p-2 bg-yellow-100 rounded-lg group-hover:bg-yellow-200 transition-colors">
+                    <AlertTriangle className="w-5 h-5 text-yellow-600" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-gray-800">All Tickets</p>
+                    <p className="text-sm text-gray-600">Manage all tickets</p>
+                  </div>
+                </Link>
+
+                <Link to="/analytics" className="flex items-center space-x-3 p-4 rounded-xl hover:bg-white/50 transition-colors group">
+                  <div className="p-2 bg-green-100 rounded-lg group-hover:bg-green-200 transition-colors">
+                    <BarChart3 className="w-5 h-5 text-green-600" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-gray-800">Analytics</p>
+                    <p className="text-sm text-gray-600">View performance metrics</p>
+                  </div>
+                </Link>
+              </>
+            )}
+
+            {user?.role === 'admin' && (
+              <Link to="/users" className="flex items-center space-x-3 p-4 rounded-xl hover:bg-white/50 transition-colors group">
+                <div className="p-2 bg-purple-100 rounded-lg group-hover:bg-purple-200 transition-colors">
+                  <Users className="w-5 h-5 text-purple-600" />
+                </div>
+                <div>
+                  <p className="font-medium text-gray-800">Manage Users</p>
+                  <p className="text-sm text-gray-600">User administration</p>
+                </div>
+              </Link>
+            )}
+          </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+};
+
+export default Dashboard;
